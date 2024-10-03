@@ -111,7 +111,7 @@ void process_received_data(std::string &buffer, int sockfd) {
             std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
             send_message(sockfd, "NICK " + new_nick);
             nickname = new_nick; // Update nickname with the new one
-        } else if (line.find("PING ") != std::string::npos) {
+        } else if (line.rfind("PING ", 0) == 0) {
             send_message(sockfd, "PONG " + line.substr(5));
         }
 
