@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
     }
 
     send_message(sockfd, "NICK " + nickname);
-    send_message(sockfd, "USER " + nickname + " 0 * :" + nickname);
+    send_message(sockfd, "USER " + get_unix_username() + " 0 * :" + nickname);
 
     std::string buffer;
 
