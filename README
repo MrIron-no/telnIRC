@@ -1,7 +1,7 @@
 A telnet-like IRC client.
 
 To compile.
-  g++ telnirc.cpp -o telnick
+  g++ telnirc.cpp -o telnirc
 
 Usage:
   ./telnirc <server> [port] [nickname] [-c] [-p <password>]
