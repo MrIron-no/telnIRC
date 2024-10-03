@@ -13,6 +13,7 @@
 #include <netdb.h>
 #include <cstring>
 #include <csignal> // For handling signals
+#include <fcntl.h>
 
 std::string currentBuffer = ""; // Global variable to store the current buffer
 std::string nickname = ""; // Global variable to store the current nickname
@@ -22,7 +23,21 @@ volatile sig_atomic_t stop_program = 0 ;
 // ANSI escape codes for colors
 const std::string BLUE = "\033[34m";
 const std::string RED = "\033[31m";
+const std::string YELLOW = "\033[33m";
 const std::string RESET = "\033[0m";
+
+void set_socket_non_blocking(int sockfd) {
+    int flags = fcntl(sockfd, F_GETFL, 0);  // Get current socket flags
+    if (flags == -1) {
+        std::cerr << "Error getting socket flags" << std::endl;
+        exit(1);
+    }
+
+    if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1) {  // Set the socket to non-blocking
+        std::cerr << "Error setting socket to non-blocking mode" << std::endl;
+        exit(1);
+    }
+}
 
 void handle_signal(int signal) {
     stop_program = 1;
@@ -118,9 +133,9 @@ void process_received_data(std::string &buffer, int sockfd) {
         // Detecting JOIN messages to update currentBuffer
         std::regex join_regex("^:" + nickname + R"(!.* JOIN (#[^\s]+))");
         std::smatch match;
-        if (std::regex_search(line, match, join_regex)) {
+        if (std::regex_search(line, match, join_regex) && currentBuffer != match[1]) {
             currentBuffer = match[1];
-            std::cout << "Current buffer updated to channel: " << currentBuffer << std::endl;
+            std::cout << YELLOW << "Current buffer updated to channel: " << currentBuffer << RESET << std::endl;
         }
 
         // Detecting PRIVMSG directed to us and updating currentBuffer
@@ -129,8 +144,10 @@ void process_received_data(std::string &buffer, int sockfd) {
             size_t start_pos = line.find(":") + 1;
             size_t end_pos = line.find("!");
             std::string sender_nick = line.substr(start_pos, end_pos - start_pos);
-            currentBuffer = sender_nick;
-            std::cout << "Current buffer updated to user: " << currentBuffer << std::endl;
+	    if (currentBuffer != sender_nick) {
+                currentBuffer = sender_nick;
+                std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
+            }
         }
 
         // Detecting NICK change for ourselves
@@ -159,14 +176,21 @@ std::string receive_message(int sockfd, std::string &buffer) {
     char temp_buffer[512];
     memset(temp_buffer, 0, sizeof(temp_buffer));
     ssize_t bytes_received = recv(sockfd, temp_buffer, sizeof(temp_buffer) - 1, 0);
-    if (bytes_received <= 0) {
-        if (bytes_received == 0) {
-            std::cout << "Connection closed by server" << std::endl;
+    if (bytes_received < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            // Non-blocking mode: No data available, so return and check later
+            return "";
         } else {
             std::cerr << "Error receiving message" << std::endl;
+            close(sockfd);
+            stop_program = 1;  // Set stop_program flag
+            return "";
         }
-	close(sockfd);
-        exit(0);
+    } else if (bytes_received == 0) {
+        std::cout << "Connection closed by server" << std::endl;
+        close(sockfd);
+        stop_program = 1;  // Set stop_program flag
+        return "";
     }
     buffer += temp_buffer; // Append the received data to the buffer
     process_received_data(buffer, sockfd); // Process complete lines in buffer
@@ -227,6 +251,7 @@ int main(int argc, char *argv[]) {
     }
 
     int sockfd = create_socket(server_name, port);
+    set_socket_non_blocking(sockfd);
 
     if (!password.empty()) {
         send_message(sockfd, "PASS :" + password);
@@ -251,24 +276,27 @@ int main(int argc, char *argv[]) {
 
     std::string input;
     while (!stop_program) {
-        std::getline(std::cin, input);
+        if (std::getline(std::cin, input)) {
 
         if (input == "/h") {
             show_help();
         } else if (input == "/cb") {
-            std::cout << "Current Buffer: " << currentBuffer << std::endl;
+            std::cout << YELLOW << "Current Buffer: " << currentBuffer << RESET << std::endl;
         } else if (input.rfind("/j ", 0) == 0) {
             std::string channel = input.substr(3);
             send_message(sockfd, "JOIN " + channel);
         } else if (input.rfind("/p ", 0) == 0) {
             std::string channel = input.substr(3);
             send_message(sockfd, "PART " + channel);
+	    currentBuffer.clear();
         } else if (input.rfind("/r ", 0) == 0) {
             std::string message = input.substr(3);
             send_message(sockfd, message);
-        } else if (input.rfind("/q ", 0) == 0) {
-            std::string message = input.substr(3);
+        } else if (input.rfind("/q", 0) == 0) {
+            std::string message = "Leaving...";
+	    if (input.size() > 2) message = input.substr(3);
             send_message(sockfd, "QUIT :" + message);
+            stop_program = 1;
         } else if (input.rfind("/n ", 0) == 0) {
             std::string newnick = input.substr(3);
             if (newnick.length() <= 12) {
@@ -283,18 +311,23 @@ int main(int argc, char *argv[]) {
                 std::string target = remainder.substr(0, first_space);
                 std::string message = remainder.substr(first_space + 1);
                 send_message(sockfd, "PRIVMSG " + target + " :" + message);
-                currentBuffer = target; // Update currentBuffer
+		if (currentBuffer != target) {
+		    currentBuffer = target; // Update currentBuffer
+		    std::cout << YELLOW << "Current buffer updated to: " << currentBuffer << RESET << std::endl;
+		}
             }
         } else if (input.rfind("/b ", 0) == 0) {
             currentBuffer = input.substr(3);
-            std::cout << "Current buffer set to: " << currentBuffer << std::endl;
+            std::cout << YELLOW << "Current buffer set to: " << currentBuffer << RESET << std::endl;
         } else if (!input.empty()) {
             if (!currentBuffer.empty()) {
                 send_message(sockfd, "PRIVMSG " + currentBuffer + " :" + input);
             } else {
-                std::cout << "No current buffer set. Please join a channel, set a buffer, or receive a direct message first." << std::endl;
+                std::cout << YELLOW << "No current buffer set. Please join a channel, set a buffer, or receive a direct message first."
+			  << RESET << std::endl;
             }
         }
+      }
     }
 
     // After stop_program is set, join the thread
