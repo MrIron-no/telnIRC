@@ -144,9 +144,29 @@ void process_received_data(std::string &buffer, int sockfd) {
             size_t start_pos = line.find(":") + 1;
             size_t end_pos = line.find("!");
             std::string sender_nick = line.substr(start_pos, end_pos - start_pos);
-	    if (currentBuffer != sender_nick) {
-                currentBuffer = sender_nick;
-                std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
+
+            // Check if the message contains a CTCP command (enclosed in \1)
+            std::regex ctcp_regex(R"(\x01([^\s]+)(.*)\x01)");  // Matches \1VERSION\1 or \1PING\1, etc.
+            std::smatch ctcp_match;
+            if (std::regex_search(line, ctcp_match, ctcp_regex)) {
+                std::string ctcpCmd = ctcp_match[1];  // Extract the CTCP command (e.g., VERSION, PING)
+	        std::string ctcpArgs = ctcp_match[2];
+
+                // Respond to the CTCP VERSION command
+                if (ctcpCmd == "VERSION") {
+                    std::string response = "NOTICE " + sender_nick + " :\x01VERSION telnIRC - theRealIRC\x01";
+                    send_message(sockfd, response);
+                }
+                else if (ctcpCmd == "PING") {
+                    std::string response = "NOTICE " + sender_nick + " :\x01PING " + ctcpArgs + "\x01";
+                    send_message(sockfd, response);
+                }
+                // Do not update currentBuffer for CTCP messages
+            } else {
+	        if (currentBuffer != sender_nick) {
+                    currentBuffer = sender_nick;
+                    std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
+                }
             }
         }
 
