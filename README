@@ -1,7 +1,6 @@
 A telnet-like IRC client.
 
-To compile.
-  g++ telnirc.cpp -o telnirc
+To compile run 'make'.
 
 Usage:
   ./telnirc <server> [port] [nickname] [-c] [-p <password>]
@@ -13,7 +12,8 @@ Commands available through /h:
   /r message       - Send raw message directly to the server
   /q message       - Quits with the specified message
   /n newnick       - Change your nickname
-  /msg user msg    - Send a private message to a user or channel (updates currentBuffer)
+  /w nickname      - Whois nickname
+  /msg target msg  - Send a private message to a user or channel (updates currentBuffer)
   /b user/channel  - Set the current buffer to a user or channel
   /cb              - Show the current buffer
   /h               - Show this help message

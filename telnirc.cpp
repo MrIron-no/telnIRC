@@ -14,6 +14,11 @@
 #include <cstring>
 #include <csignal> // For handling signals
 #include <fcntl.h>
+#include <functional>  // for std::bind
+#include <cerrno>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
 
 std::string currentBuffer = ""; // Global variable to store the current buffer
 std::string nickname = ""; // Global variable to store the current nickname
@@ -66,14 +71,27 @@ std::string generate_random_number_string(size_t length) {
     return result;
 }
 
-int create_socket(const std::string &server_name, const std::string &port) {
-    struct addrinfo hints{}, *res;
+std::string get_timestamp() {
+    auto now = std::time(nullptr);
+    auto tm = std::localtime(&now);
+    std::ostringstream oss;
+    oss << std::setfill('0')
+        << std::setw(2) << tm->tm_hour << ':'
+        << std::setw(2) << tm->tm_min << ':'
+        << std::setw(2) << tm->tm_sec;
+    return oss.str();
+}
+
+int create_socket(const std::string &server_name, const unsigned short port) {
+    struct addrinfo hints;
+    struct addrinfo *res;
     int sockfd;
 
+    memset(&hints, 0, sizeof(hints));  // Initialize hints to zero
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    if (getaddrinfo(server_name.c_str(), port.c_str(), &hints, &res) != 0) {
+    if (getaddrinfo(server_name.c_str(), std::to_string(port).c_str(), &hints, &res) != 0) {
         std::cerr << "Error in resolving host" << std::endl;
         exit(1);
     }
@@ -99,7 +117,114 @@ void send_message(int sockfd, const std::string &message) {
         std::cerr << "Error sending message" << std::endl;
         exit(1);
     }
-    std::cout << "[OUT]: " << message << std::endl;
+    std::cout << get_timestamp() << " [OUT]: " << message << std::endl;
+}
+
+void handle_privmsg(const std::string &line, int sockfd) {
+    // Handle color output first
+    bool contains_nickname = line.find(nickname) != std::string::npos;
+    std::cout << get_timestamp() << " "
+              << (contains_nickname ? RED : BLUE)
+              << "[IN ]: " << line << RESET << std::endl;
+
+    // Extract sender nickname
+    size_t start_pos = line.find(":") + 1;
+    size_t end_pos = line.find("!");
+    std::string sender_nick = line.substr(start_pos, end_pos - start_pos);
+
+    // Handle CTCP commands
+    std::smatch ctcp_match;
+    std::regex ctcp_regex("\\x01([^\\s]+)(.*)\\x01");
+
+    if (std::regex_search(line, ctcp_match, ctcp_regex)) {
+        std::string ctcpCmd = ctcp_match[1];
+        std::string ctcpArgs = ctcp_match[2];
+
+        if (ctcpCmd == "VERSION") {
+            send_message(sockfd, "NOTICE " + sender_nick + " :\x01VERSION telnIRC - theRealIRC\x01");
+            return;
+        } else if (ctcpCmd == "PING") {
+            send_message(sockfd, "NOTICE " + sender_nick + " :\x01PING " + ctcpArgs + "\x01");
+            return;
+        }
+    }
+
+    // Check if message is directed to us
+    std::regex privmsg_regex("^:[^\\s]+![^\\s]+ PRIVMSG " + nickname + " :.*$");
+    if (!std::regex_search(line, privmsg_regex)) {
+        return;  // Early return if not directed to us
+    }
+
+    // We only update the current buffer if the message is directed to us and is not CTCP
+    if (currentBuffer != sender_nick) {
+        currentBuffer = sender_nick;
+        std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
+    }
+}
+
+bool process_line(const std::string &line, int sockfd) {
+    std::smatch match;
+
+    // PRIVMSG handling (including color output)
+    if (std::regex_search(line, std::regex("^:[^\\s]+ PRIVMSG"))) {
+        handle_privmsg(line, sockfd);
+        return true;
+    }
+
+    // Non-PRIVMSG messages are printed in default color
+    std::cout << get_timestamp() << " [IN ]: " << line << std::endl;
+
+    // Welcome message (001)
+    if (std::regex_search(line, match, std::regex("^:[^\\s]+ 001 ([^\\s]+)")) &&
+        match[1] != nickname) {
+        nickname = match[1];
+        std::cout << "Nickname updated to: " << nickname << std::endl;
+        return true;
+    }
+
+    // Nickname in use (433)
+    if (std::regex_search(line, std::regex("^:[^\\s]+ 433"))) {
+        std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
+        send_message(sockfd, "NICK " + new_nick);
+        nickname = new_nick;
+        std::cout << "Nickname in use. Changed to: " << new_nick << std::endl;
+        return true;
+    }
+
+    // PING response
+    if (line.rfind("PING ", 0) == 0) {
+        send_message(sockfd, "PONG " + line.substr(5));
+        return true;
+    }
+
+    // JOIN message
+    if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* JOIN (#[^\\s]+)"))) {
+        if (currentBuffer != match[1]) {
+            currentBuffer = match[1];
+            std::cout << YELLOW << "Current buffer updated to channel: " << currentBuffer << RESET << std::endl;
+        }
+        return true;
+    }
+
+    // NICK change
+    if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* NICK :(.*)$"))) {
+        nickname = match[1];
+        std::cout << "Nickname updated to: " << nickname << std::endl;
+        return true;
+    }
+
+    // CAP messages
+    if (std::regex_search(line, match, std::regex("^:[^\\s]+ CAP [^\\s]+ LS :(.*)$"))) {
+        send_message(sockfd, "CAP REQ :" + std::string(match[1]));
+        return true;
+    }
+
+    if (std::regex_search(line, std::regex("^:[^\\s]+ CAP [^\\s]+ ACK .*$"))) {
+        send_message(sockfd, "CAP END");
+        return true;
+    }
+
+    return false;
 }
 
 void process_received_data(std::string &buffer, int sockfd) {
@@ -107,88 +232,10 @@ void process_received_data(std::string &buffer, int sockfd) {
     while ((end = buffer.find("\r\n")) != std::string::npos) {
         std::string line = buffer.substr(0, end);
 
-        // Check if the message is a PRIVMSG
-        bool is_privmsg = std::regex_search(line, std::regex(R"(^:[^\s]+ PRIVMSG)"));
-        bool contains_nickname = line.find(nickname) != std::string::npos;
+        // Process line
+        process_line(line, sockfd);
 
-        if (is_privmsg && contains_nickname) {
-            std::cout << RED << "[IN ]: " << line << RESET << std::endl;
-        } else if (is_privmsg) {
-            std::cout << BLUE << "[IN ]: " << line << RESET << std::endl;
-        } else {
-            std::cout << "[IN ]: " << line << std::endl;
-        }
-
-        // Check for 433 message using regex
-        std::regex nick_in_use_regex(R"(^:[^\s]+ 433)");
-        if (std::regex_search(line, nick_in_use_regex)) {
-            std::cout << "Nickname in use. Attempting a new one..." << std::endl;
-            std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
-            send_message(sockfd, "NICK " + new_nick);
-            nickname = new_nick; // Update nickname with the new one
-        } else if (line.rfind("PING ", 0) == 0) {
-            send_message(sockfd, "PONG " + line.substr(5));
-        }
-
-        // Detecting JOIN messages to update currentBuffer
-        std::regex join_regex("^:" + nickname + R"(!.* JOIN (#[^\s]+))");
-        std::smatch match;
-        if (std::regex_search(line, match, join_regex) && currentBuffer != match[1]) {
-            currentBuffer = match[1];
-            std::cout << YELLOW << "Current buffer updated to channel: " << currentBuffer << RESET << std::endl;
-        }
-
-        // Detecting PRIVMSG directed to us and updating currentBuffer
-        std::regex privmsg_regex(R"(^:[^\s]+![^\s]+ PRIVMSG )" + nickname + R"( :.*$)");
-        if (std::regex_search(line, privmsg_regex)) {
-            size_t start_pos = line.find(":") + 1;
-            size_t end_pos = line.find("!");
-            std::string sender_nick = line.substr(start_pos, end_pos - start_pos);
-
-            // Check if the message contains a CTCP command (enclosed in \1)
-            std::regex ctcp_regex(R"(\x01([^\s]+)(.*)\x01)");  // Matches \1VERSION\1 or \1PING\1, etc.
-            std::smatch ctcp_match;
-            if (std::regex_search(line, ctcp_match, ctcp_regex)) {
-                std::string ctcpCmd = ctcp_match[1];  // Extract the CTCP command (e.g., VERSION, PING)
-	        std::string ctcpArgs = ctcp_match[2];
-
-                // Respond to the CTCP VERSION command
-                if (ctcpCmd == "VERSION") {
-                    std::string response = "NOTICE " + sender_nick + " :\x01VERSION telnIRC - theRealIRC\x01";
-                    send_message(sockfd, response);
-                }
-                else if (ctcpCmd == "PING") {
-                    std::string response = "NOTICE " + sender_nick + " :\x01PING " + ctcpArgs + "\x01";
-                    send_message(sockfd, response);
-                }
-                // Do not update currentBuffer for CTCP messages
-            } else {
-	        if (currentBuffer != sender_nick) {
-                    currentBuffer = sender_nick;
-                    std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
-                }
-            }
-        }
-
-        // Detecting NICK change for ourselves
-        std::regex nick_change_regex("^:" + nickname + R"(!.* NICK :(.*)$)");
-        if (std::regex_search(line, match, nick_change_regex)) {
-            nickname = match[1];
-            std::cout << "Nickname updated to: " << nickname << std::endl;
-        }
-
-        // Detecting CAP LS and CAP ACK messages
-        std::regex cap_ls_regex(R"(^:[^\s]+ CAP [^\s]+ LS :(.*)$)");
-        std::regex cap_ack_regex(R"(^:[^\s]+ CAP [^\s]+ ACK .*$)");
-
-        if (std::regex_search(line, match, cap_ls_regex)) {
-            std::string capabilities = match[1];
-            send_message(sockfd, "CAP REQ :" + capabilities);
-        } else if (std::regex_search(line, cap_ack_regex)) {
-            send_message(sockfd, "CAP END");
-        }
-
-        buffer.erase(0, end + 2); // Remove the processed line from buffer
+        buffer.erase(0, end + 2);
     }
 }
 
@@ -233,11 +280,26 @@ void show_help() {
     std::cout << "/r message       - Send raw message directly to the server\n";
     std::cout << "/q message       - Quits with the specified message\n";
     std::cout << "/n newnick       - Change your nickname\n";
+    std::cout << "/w nickname      - Whois a nickname\n";
     std::cout << "/msg user msg    - Send a private message to a user or channel (updates currentBuffer)\n";
     std::cout << "/b user/channel  - Set the current buffer to a user or channel\n";
     std::cout << "/cb              - Show the current buffer\n";
     std::cout << "/h               - Show this help message\n";
 }
+
+class ReceiveHandler {
+public:
+    ReceiveHandler(int sock, std::string& buf) : sockfd(sock), buffer(buf) {}
+
+    void operator()() {
+        while (!stop_program) {
+            receive_message(sockfd, buffer);
+        }
+    }
+private:
+    int sockfd;
+    std::string& buffer;
+};
 
 int main(int argc, char *argv[]) {
     show_ascii_banner();
@@ -252,7 +314,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::string server_name = argv[1];
-    std::string port = "6667";
+    unsigned short port = 6667;
     nickname = get_unix_username();
     bool use_cap = false;
     std::string password;
@@ -264,11 +326,13 @@ int main(int argc, char *argv[]) {
         } else if (arg == "-p" && i + 1 < argc) {
             password = argv[++i];
         } else if (isdigit(arg[0])) {
-            port = arg;
+            port = std::stoul(arg);
         } else {
             nickname = arg;
         }
     }
+
+    std::cout << "Connecting to " << server_name << ":" << port << std::endl;
 
     int sockfd = create_socket(server_name, port);
     set_socket_non_blocking(sockfd);
@@ -282,15 +346,10 @@ int main(int argc, char *argv[]) {
     }
 
     send_message(sockfd, "NICK " + nickname);
-    send_message(sockfd, "USER " + get_unix_username() + " 0 * :" + nickname);
+    send_message(sockfd, "USER " + nickname + " 0 * :" + nickname);
 
     std::string buffer;
-
-    std::thread receive_thread([sockfd, &buffer]() {
-        while (!stop_program) {
-            receive_message(sockfd, buffer);
-        }
-    });
+    std::thread receive_thread(ReceiveHandler(sockfd, buffer));
 
     receive_thread.detach();
 
@@ -302,14 +361,17 @@ int main(int argc, char *argv[]) {
             show_help();
         } else if (input == "/cb") {
             std::cout << YELLOW << "Current Buffer: " << currentBuffer << RESET << std::endl;
-        } else if (input.rfind("/j ", 0) == 0) {
+        } else if (input.rfind("/j ", 0) == 0 && input.size() > 3) {
             std::string channel = input.substr(3);
             send_message(sockfd, "JOIN " + channel);
-        } else if (input.rfind("/p ", 0) == 0) {
+        } else if (input.rfind("/w ", 0) == 0 && input.size() > 3) {
+            std::string nick = input.substr(3);
+            send_message(sockfd, "WHOIS " + nick);
+        } else if (input.rfind("/p ", 0) == 0 && input.size() > 3) {
             std::string channel = input.substr(3);
             send_message(sockfd, "PART " + channel);
-	    currentBuffer.clear();
-        } else if (input.rfind("/r ", 0) == 0) {
+	        currentBuffer.clear();
+        } else if (input.rfind("/r ", 0) == 0  && input.size() > 3) {
             std::string message = input.substr(3);
             send_message(sockfd, message);
         } else if (input.rfind("/q", 0) == 0) {
@@ -317,14 +379,14 @@ int main(int argc, char *argv[]) {
 	    if (input.size() > 2) message = input.substr(3);
             send_message(sockfd, "QUIT :" + message);
             stop_program = 1;
-        } else if (input.rfind("/n ", 0) == 0) {
+        } else if (input.rfind("/n ", 0) == 0 && input.size() > 3) {
             std::string newnick = input.substr(3);
             if (newnick.length() <= 12) {
                 send_message(sockfd, "NICK " + newnick);
             } else {
                 std::cout << "Nickname too long. Please use 12 characters or fewer." << std::endl;
             }
-        } else if (input.rfind("/msg ", 0) == 0) {
+        } else if (input.rfind("/msg ", 0) == 0 && input.size() > 5) {
             std::string remainder = input.substr(5);
             size_t first_space = remainder.find(' ');
             if (first_space != std::string::npos) {
