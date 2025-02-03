@@ -1,22 +1,12 @@
-A telnet-like IRC client.
+A telnet-like IRC client and server.
 
-To compile run 'make'.
+To compile run 'make'. Copy 'config.cfg.dist' to 'config.cfg' and do your stuff.
 
 Usage:
-  ./telnirc <server> [port] [nickname] [-c] [-p <password>]
-  -c: Will request available CAPs (IRCv3)
+  ./telnirc [-f configfile] -c | -s
+  -c: Spins up a client
+  -s: Spins up a server
 
-Commands available through /h:
-  /j #channel      - Join a channel
-  /p #channel      - Part from a channel
-  /r message       - Send raw message directly to the server
-  /q message       - Quits with the specified message
-  /n newnick       - Change your nickname
-  /w nickname      - Whois nickname
-  /msg target msg  - Send a private message to a user or channel (updates currentBuffer)
-  /b user/channel  - Set the current buffer to a user or channel
-  /cb              - Show the current buffer
-  /h               - Show this help message
-
+Type /h for help.
 
 -- MrIron

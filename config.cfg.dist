@@ -1,0 +1,14 @@
+[telnIRC]
+server_ip=127.0.0.1
+port=6667
+nick=telnIRC
+user=telnirc
+cap=yes
+password=
+
+[telnERV]
+server_ip=127.0.0.1
+numeric=49
+port=4400
+password=passwd
+server_name=telnerv.undernet.org
