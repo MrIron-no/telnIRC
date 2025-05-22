@@ -16,27 +16,27 @@
  * USA.
  */
 
-#ifndef MODULE_BASE_H
-#define MODULE_BASE_H
+#pragma once
 
 #include <string>
 
 #include "connection.h"
+#include "UIManager.h"
 
 class ConnectionManager;
 
 class Modules {
 public:
     ConnectionManager* conn = nullptr;
+    UIManager& ui;
 
-    Modules(const std::string&) {};
+    Modules(const std::string&, UIManager& _ui) : ui(_ui) {};
     virtual ~Modules() = default;
 
     // Pure virtual functions for derived classes to implement
     virtual void Attach() = 0;
-    virtual void StartLoop() = 0;
+    virtual void Detach() = 0;
+    virtual void OnCommand(std::string) = 0;
     virtual bool Parse(const std::string&) = 0;
     virtual void Banner() const = 0;
 };
-
-#endif // MODULE_BASE_H

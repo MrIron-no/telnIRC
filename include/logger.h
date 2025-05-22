@@ -17,26 +17,22 @@
  */
 
 #pragma once
+#include <fstream>
+#include <string>
 
-#include <cstring>
+#include "misc.h"
 
-#define NUMNICKLOG 6
-#define NUMNICKMASK 63          /* (NUMNICKBASE-1) */
-static const char convert2y[] = {
-  'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
-  'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
-  'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
-  'w','x','y','z','0','1','2','3','4','5','6','7','8','9','[',']'
+class Logger {
+    std::ofstream logfile;
+public:
+    Logger() = default;
+    ~Logger() { if (logfile.is_open()) logfile.close(); }
+
+    void open(const std::string& filename) { logfile.open(filename, std::ios::app); }
+    void close() {
+        if (logfile.is_open()) logfile.close();
+    }
+    void log(const std::string& line) {
+        if (logfile.is_open()) logfile << "[" << get_timestamp() << "] " << line << std::endl;
+    }
 };
-
-const char* inttobase64( char* buf, unsigned int v, size_t count )
-{
-buf[count] = '\0';
-while (count > 0)
-	{
-	buf[ --count ] = convert2y[(v & NUMNICKMASK)];
-	v >>= NUMNICKLOG;
-	}
-
-return buf;
-}

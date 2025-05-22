@@ -1,1 +1,76 @@
+# Config files
 config.cfg
+
+# TLS files
+*.cert
+*.key
+*.pem
+
+# Compiled object files
+*.o
+*.obj
+
+# Compiled binary files
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+telnirc
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Debug files
+*.dSYM/
+*.stackdump
+
+# Build directories
+/build/
+/bin/
+/dist/
+/Debug/
+/Release/
+
+# Autotools cache and temp files
+autom4te.cache/
+ltmain.sh
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# Editor/IDE files
+*.swp
+*~
+*.bak
+*.tmp
+*.user
+*.sublime-workspace
+*.sublime-project
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Other
+tags
+stamp-h1
+defs.h

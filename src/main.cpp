@@ -16,26 +16,36 @@
  * USA.
  */
 
+#include <ncurses.h>
 #include <string>
 #include <csignal>
 #include <cstring>
 #include <iostream>
+#include <vector>
+#include <algorithm>
 
 #include "telnirc.h"
 #include "telnerv.h"
+#include "UIManager.h"
 
 volatile sig_atomic_t stop_program = 0;
 
-void handle_signal(int signal) {
-    stop_program = 1;
-    std::cout << "\nProgram terminated by signal " << signal << "\n";
-    exit(signal);
-}
+void handle_signal(int) { stop_program = 1; }
+
+void handle_resize(int) { UIManager::resized = 1; }
 
 int main(int argc, char *argv[]) {
+    // Ignore SIGPIPE
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;  // Ignore SIGPIPE
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGPIPE, &sa, nullptr);
+
     // Handle termination signals
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
+    signal(SIGWINCH, handle_resize);
 
     std::string configFile = "config.cfg";
 
@@ -82,12 +92,16 @@ int main(int argc, char *argv[]) {
 
     Modules* module = nullptr;
 
+    // Initialize ncurses
+    UIManager ui;
+    ui.init();
+
     switch (mode) {
         case 'c':
-            module = new telnIRC(configFile);
+            module = new telnIRC(configFile, ui);
             break;
         case 's':
-            module = new telnERV(configFile);
+            module = new telnERV(configFile, ui);
             break;
         default:
             return 1;
@@ -99,8 +113,54 @@ int main(int argc, char *argv[]) {
     // Attach.
     module->Attach();
 
-    // Start loop.
-    module->StartLoop();
+    std::string input_line;
+    int cursor_x = 3;
+    bool need_redraw_output = true;
+
+    while (!stop_program) {
+        bool resized_flag = false;
+        int ch = ui.getInput(input_line, cursor_x, resized_flag);
+
+        if (resized_flag) {
+            need_redraw_output = true;
+            ui.redrawInput(input_line, cursor_x);
+            continue;
+        }
+
+        switch (ch) {
+            case '\n':
+                module->OnCommand(input_line);
+                input_line.clear();
+                cursor_x = 3;
+                ui.scrollToBottom();
+                need_redraw_output = true;
+                break;
+            case KEY_BACKSPACE:
+            case 127:
+            case 8:
+                if (!input_line.empty()) input_line.pop_back();
+                break;
+            case KEY_PPAGE: ui.scrollPageUp(); need_redraw_output = true; break;
+            case KEY_NPAGE: ui.scrollPageDown(); need_redraw_output = true; break;
+            case KEY_UP:    ui.scrollUp(); need_redraw_output = true; break;
+            case KEY_DOWN:  ui.scrollDown(); need_redraw_output = true; break;
+            default:
+                if (isprint(ch)) input_line += static_cast<char>(ch);
+                break;
+        }
+
+        ui.clampScroll();
+        if (need_redraw_output) {
+            ui.redrawOutput();
+            need_redraw_output = false;
+        }
+        ui.redrawInput(input_line, cursor_x);
+    }
+
+    // After stop_program is set, join the thread
+    module->Detach();
+
+    ui.shutdown();
 
     // Clean up.
     delete module; module = nullptr;

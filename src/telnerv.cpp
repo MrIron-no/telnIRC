@@ -21,9 +21,10 @@
 #include "connection.h"
 #include "numeric.h"
 #include "telnerv.h"
+#include "UIManager.h"
 
-telnERV::telnERV(const std::string& configFile)
-    : Modules(configFile) {
+telnERV::telnERV(const std::string& configFile, UIManager& ui)
+    : Modules(configFile, ui) {
 
     /* Load configuration. */
     ConfigParser config;
@@ -34,6 +35,10 @@ telnERV::telnERV(const std::string& configFile)
     password = config.get<std::string>("password", "password");
     intYY = config.get<unsigned short>("numeric", 51);
     serverName = config.get<std::string>("server_name", "telnerv.undernet.org");
+    use_tls = config.get<bool>("tls", false);
+    caCertFile = config.get<std::string>("tls_cacert", "");
+    clientCertFile = config.get<std::string>("tls_cert", "");
+    clientKeyFile = config.get<std::string>("tls_key", "");
 }
 
 telnERV::~telnERV() {
@@ -44,51 +49,46 @@ void telnERV::Attach() {
     char buf[3];
     inttobase64(buf, intYY, 2);
     serverYY = buf;
-    std::cout << YELLOW << "My YY: " << serverYY << RESET << std::endl;
+    ui.print(NC_YELLOW) << "My YY: " << serverYY << std::endl;
 
     // Initiate connection.
-    conn = new ConnectionManager(this, uplink, port);
+    conn = new ConnectionManager(this, ui, logger, uplink, port, use_tls, caCertFile, clientCertFile, clientKeyFile);
+
+    conn->Start();
 
     conn->SendData("PASS :" + password);
     conn->SendData("SERVER " + serverName + " 0 " + std::to_string(time(nullptr)) + " " + std::to_string(time(nullptr)) + " J10 " + serverYY + "]]] + :telnERV");
 }
 
-void telnERV::StartLoop() {
-    conn->Start();
-
-    std::string input;
-    while (!stop_program) {
-        if (std::getline(std::cin, input)) {
-            if (input == "/h") {
-                show_help();
-            } else if (input.rfind("/r ", 0) == 0  && input.size() > 3) {
-                std::string message = input.substr(3);
-                conn->SendData(message);
-            } else if (input.rfind("/n ", 0) == 0) {
-                Params params = Tokenizer(input.substr(3));
-                if( params.size() > 3)
-                    burstClient(params[0], params[1], params[2], params[3]);
-                else if( params.size() > 2)
-                    burstClient(params[0], params[1], params[2]);                
-            } else if (input.rfind("/sq", 0) == 0) {
-                std::string message = "Leaving...";
-                if (input.size() > 3) message = input.substr(4);
-                conn->SendData(serverYY + " SQ " + uplinkName + " :" + message);
-                stop_program = 1;
-            }
-        }
-      }
-
-    // After stop_program is set, join the thread
+void telnERV::Detach() {
     conn->Stop();
 }
 
+void telnERV::OnCommand(std::string input) {
+    if (input == "/h") {
+        show_help();
+    } else if (input.rfind("/n ", 0) == 0) {
+        Params params = Tokenizer(input.substr(3));
+        if( params.size() > 3)
+            burstClient(params[0], params[1], params[2], params[3]);
+        else if( params.size() > 2)
+            burstClient(params[0], params[1], params[2]);                
+    } else if (input.rfind("/sq", 0) == 0) {
+        std::string message = "Leaving...";
+        if (input.size() > 3) message = input.substr(4);
+        conn->SendData(serverYY + " SQ " + uplinkName + " :" + message);
+        stop_program = 1;
+    } else {
+        conn->SendData(input);
+    }
+}
+
 void telnERV::Banner() const {
-    std::cout << "######################################" << std::endl;
-    std::cout << "#                                    #" << std::endl;
-    std::cout << "#            telnERV                 #" << std::endl;
-    std::cout << "#                                    #" << std::endl;
-    std::cout << "######################################" << std::endl;
+    ui.print << "######################################" << std::endl;
+    ui.print << "#                                    #" << std::endl;
+    ui.print << "#            telnERV                 #" << std::endl;
+    ui.print << "#                                    #" << std::endl;
+    ui.print << "######################################" << std::endl;
 }
 
 void telnERV::burstClient(std::string nick, std::string user, std::string host, std::string modes) {
@@ -97,11 +97,11 @@ void telnERV::burstClient(std::string nick, std::string user, std::string host, 
     conn->SendData(serverYY + " N " + nick + " " + std::to_string(time(nullptr)) + " " + std::to_string(time(nullptr)) + " " + user + " " + host + " " + modes + " AAAAA " + serverYY + XXX + " :telnERV client");
     clients++;
 
-    std::cout << RED << "Bursted client " << nick << "!" << user << "@" << host << RESET << std::endl;
+    ui.print(NC_RED) << "Bursted client " << nick << "!" << user << "@" << host << std::endl;
 }
 
 bool telnERV::Parse(const std::string &line) {
-    std::cout << get_timestamp() << " -> " << line << std::endl;
+    ui.print << get_timestamp() << " -> " << line << std::endl;
 
     Params params = Tokenizer(line);
 
@@ -111,8 +111,8 @@ bool telnERV::Parse(const std::string &line) {
         uplinkYY = params[6].substr(0, 2);
 
         // Output the results
-        std::cout << YELLOW << "Uplink Name: " << uplinkName << RESET << std::endl;
-        std::cout << YELLOW << "Uplink YY: " << uplinkYY << RESET << std::endl;
+        ui.print(NC_YELLOW) << "Uplink Name: " << uplinkName << std::endl;
+        ui.print(NC_YELLOW) << "Uplink YY: " << uplinkYY << std::endl;
 
         return true;
     }
@@ -126,7 +126,7 @@ bool telnERV::Parse(const std::string &line) {
         conn->SendData(serverYY + " EB");
         conn->SendData(serverYY + " EA");
 
-        std::cout << YELLOW << "Burst completed." << RESET << std::endl;
+        ui.print(NC_YELLOW) << "Burst completed." << std::endl;
 
         return true;
     }
@@ -154,8 +154,8 @@ bool telnERV::Parse(const std::string &line) {
 }
 
 void telnERV::show_help() const {
-    std::cout << "Available Commands:\n";
-    std::cout << "/h                              - Show this help message\n";
-    std::cout << "/sq [msg]                       - Squits\n";
-    std::cout << "/n <nick> <user> <host> [modes] - Bursts a new client\n";
+    ui.print << "Available Commands:" << std::endl;
+    ui.print << "/h                              - Show this help message" << std::endl;
+    ui.print << "/sq [msg]                       - Squits" << std::endl;
+    ui.print << "/n <nick> <user> <host> [modes] - Bursts a new client" << std::endl;
 }

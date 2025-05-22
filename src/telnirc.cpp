@@ -22,9 +22,11 @@
 #include "misc.h"
 #include "connection.h"
 #include "telnirc.h"
+#include "UIManager.h"
+#include "logger.h"
 
-telnIRC::telnIRC(const std::string& configFile)
-    : Modules(configFile) {
+telnIRC::telnIRC(const std::string& configFile, UIManager& ui)
+    : Modules(configFile, ui) {
 
     /* Load configuration. */
     ConfigParser config;
@@ -35,7 +37,12 @@ telnIRC::telnIRC(const std::string& configFile)
     password = config.get<std::string>("password", "");
     nickname = config.get<std::string>("nick", get_unix_username());
     username = config.get<std::string>("user", nickname);
+    log_file = config.get<std::string>("logfile", "");
     use_cap = config.get<bool>("cap", true);
+    use_tls = config.get<bool>("tls", false);
+    caCertFile = config.get<std::string>("tls_cacert", "");
+    clientCertFile = config.get<std::string>("tls_cert", "");
+    clientKeyFile = config.get<std::string>("tls_key", "");
 }
 
 telnIRC::~telnIRC() {
@@ -43,8 +50,18 @@ telnIRC::~telnIRC() {
 }
 
 void telnIRC::Attach() {
+    // Initiate logger
+    if (!log_file.empty()) {
+        logger = new Logger();
+        logger->open(log_file);
+        logger->log("telnIRC started");
+    }
+
     // Initiate connection.
-    conn = new ConnectionManager(this, server_name, port);
+    conn = new ConnectionManager(this, ui, logger, server_name, port, use_tls, caCertFile, clientCertFile, clientKeyFile);
+
+    // Start receiving loop in a thread.
+    conn->Start();
 
     if (!password.empty()) {
         conn->SendData("PASS :" + password);
@@ -58,87 +75,78 @@ void telnIRC::Attach() {
     conn->SendData("USER " + username + " 0 * :" + nickname);
 }
 
-void telnIRC::StartLoop() {
-    // Start receiving loop in a thread.
-    conn->Start();
-
-    std::string input;
-    while (!stop_program) {
-        if (std::getline(std::cin, input)) {
-
-        if (input == "/h") {
-            show_help();
-        } else if (input == "/cb") {
-            std::cout << YELLOW << "Current Buffer: " << currentBuffer << RESET << std::endl;
-        } else if (input.rfind("/j ", 0) == 0 && input.size() > 3) {
-            std::string channel = input.substr(3);
-            conn->SendData("JOIN " + channel);
-        } else if (input.rfind("/w ", 0) == 0 && input.size() > 3) {
-            std::string nick = input.substr(3);
-            conn->SendData("WHOIS " + nick);
-        } else if (input.rfind("/p ", 0) == 0 && input.size() > 3) {
-            std::string channel = input.substr(3);
-            conn->SendData("PART " + channel);
-	        currentBuffer.clear();
-        } else if (input.rfind("/r ", 0) == 0  && input.size() > 3) {
-            std::string message = input.substr(3);
-            conn->SendData(message);
-        } else if (input.rfind("/q", 0) == 0) {
-            std::string message = "Leaving...";
-	    if (input.size() > 2) message = input.substr(3);
-            conn->SendData("QUIT :" + message);
-            stop_program = 1;
-        } else if (input.rfind("/n ", 0) == 0 && input.size() > 3) {
-            std::string newnick = input.substr(3);
-            if (newnick.length() <= 12) {
-                conn->SendData("NICK " + newnick);
-            } else {
-                std::cout << "Nickname too long. Please use 12 characters or fewer." << std::endl;
-            }
-        } else if (input.rfind("/msg ", 0) == 0 && input.size() > 5) {
-            std::string remainder = input.substr(5);
-            size_t first_space = remainder.find(' ');
-            if (first_space != std::string::npos) {
-                std::string target = remainder.substr(0, first_space);
-                std::string message = remainder.substr(first_space + 1);
-                conn->SendData("PRIVMSG " + target + " :" + message);
-		if (currentBuffer != target) {
-		    currentBuffer = target; // Update currentBuffer
-		    std::cout << YELLOW << "Current buffer updated to: " << currentBuffer << RESET << std::endl;
-		}
-            }
-        } else if (input.rfind("/b ", 0) == 0) {
-            currentBuffer = input.substr(3);
-            std::cout << YELLOW << "Current buffer set to: " << currentBuffer << RESET << std::endl;
-        } else if (!input.empty()) {
-            if (!currentBuffer.empty()) {
-                conn->SendData("PRIVMSG " + currentBuffer + " :" + input);
-            } else {
-                std::cout << YELLOW << "No current buffer set. Please join a channel, set a buffer, or receive a direct message first."
-			  << RESET << std::endl;
-            }
-        }
-      }
-    }
-
-    // After stop_program is set, join the thread
+void telnIRC::Detach() {
     conn->Stop();
 }
 
+void telnIRC::OnCommand(std::string input) {
+    if (input == "/h") {
+        show_help();
+    } else if (input.rfind("/j ", 0) == 0 && input.size() > 3) {
+        std::string channel = input.substr(3);
+        conn->SendData("JOIN " + channel);
+    } else if (input.rfind("/w ", 0) == 0 && input.size() > 3) {
+        std::string nick = input.substr(3);
+        conn->SendData("WHOIS " + nick);
+    } else if (input.rfind("/p ", 0) == 0 && input.size() > 3) {
+        std::string channel = input.substr(3);
+        conn->SendData("PART " + channel);
+        currentBuffer.clear();
+        ui.setHeader("");
+    } else if (input.rfind("/r ", 0) == 0  && input.size() > 3) {
+        std::string message = input.substr(3);
+        conn->SendData(message);
+    } else if (input.rfind("/q", 0) == 0) {
+        std::string message = "Leaving...";
+    if (input.size() > 2) message = input.substr(3);
+        conn->SendData("QUIT :" + message);
+        stop_program = 1;
+    } else if (input.rfind("/n ", 0) == 0 && input.size() > 3) {
+        conn->SendData("NICK " + input.substr(3));
+    } else if (input.rfind("/msg ", 0) == 0 && input.size() > 5) {
+        std::string remainder = input.substr(5);
+        size_t first_space = remainder.find(' ');
+        if (first_space != std::string::npos) {
+            std::string target = remainder.substr(0, first_space);
+            std::string message = remainder.substr(first_space + 1);
+            conn->SendData("PRIVMSG " + target + " :" + message);
+            if (currentBuffer != target) {
+                currentBuffer = target; // Update currentBuffer
+                ui.print(NC_YELLOW) << "Current buffer updated to: " << currentBuffer << std::endl;
+                ui.setHeader("Current buffer: " + currentBuffer);
+            }
+        }
+    } else if (input.rfind("/sb ", 0) == 0) {
+        currentBuffer = input.substr(4);
+        ui.print(NC_YELLOW) << "Current buffer set to: " << currentBuffer << std::endl;
+        ui.setHeader("Current buffer: " + currentBuffer);
+    } else if (!input.empty()) {
+        if (!currentBuffer.empty()) {
+            conn->SendData("PRIVMSG " + currentBuffer + " :" + input);
+        } else {
+            ui.print(NC_YELLOW) << "No current buffer set. Please join a channel, set a buffer, or receive a direct message first." << std::endl;
+        }
+    }
+}
+
 void telnIRC::Banner() const {
-    std::cout << "######################################" << std::endl;
-    std::cout << "#                                    #" << std::endl;
-    std::cout << "#            telnIRC                 #" << std::endl;
-    std::cout << "#                                    #" << std::endl;
-    std::cout << "######################################" << std::endl;
+    ui.print << "######################################" << std::endl;
+    ui.print << "#                                    #" << std::endl;
+    ui.print << "#            telnIRC                 #" << std::endl;
+    ui.print << "#                                    #" << std::endl;
+    ui.print << "######################################" << std::endl;
 }
 
 void telnIRC::handle_privmsg(const std::string &line) {
     // Handle color output first
     bool contains_nickname = line.find(nickname) != std::string::npos;
-    std::cout << get_timestamp() << " "
-              << (contains_nickname ? RED : BLUE)
-              << "-> " << line << RESET << std::endl;
+    if (contains_nickname) {
+        ui.print(NC_RED) << get_timestamp() << " "
+                << "-> " << line << std::endl;
+    } else {
+        ui.print(NC_BLUE) << get_timestamp() << " "
+                << "-> " << line << std::endl;
+    }
 
     // Extract sender nickname
     size_t start_pos = line.find(":") + 1;
@@ -171,12 +179,16 @@ void telnIRC::handle_privmsg(const std::string &line) {
     // We only update the current buffer if the message is directed to us and is not CTCP
     if (currentBuffer != sender_nick) {
         currentBuffer = sender_nick;
-        std::cout << YELLOW << "Current buffer updated to user: " << currentBuffer << RESET << std::endl;
+        ui.print(NC_YELLOW) << "Current buffer updated to user: " << currentBuffer << std::endl;
+        ui.setHeader("Current buffer: " + currentBuffer);
     }
 }
 
 bool telnIRC::Parse(const std::string& line) {
     std::smatch match;
+
+    if (logger)
+        logger->log("-> " + line);
 
     // PRIVMSG handling (including color output)
     if (std::regex_search(line, std::regex("^:[^\\s]+ PRIVMSG"))) {
@@ -185,13 +197,13 @@ bool telnIRC::Parse(const std::string& line) {
     }
 
     // Non-PRIVMSG messages are printed in default color
-    std::cout << get_timestamp() << " -> " << line << std::endl;
+    ui.print << get_timestamp() << " -> " << line << std::endl;
 
     // Welcome message (001)
     if (std::regex_search(line, match, std::regex("^:[^\\s]+ 001 ([^\\s]+)")) &&
         match[1] != nickname) {
         nickname = match[1];
-        std::cout << "Nickname updated to: " << nickname << std::endl;
+        ui.print << "Nickname updated to: " << nickname << std::endl;
         return true;
     }
 
@@ -200,7 +212,7 @@ bool telnIRC::Parse(const std::string& line) {
         std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
         conn->SendData("NICK " + new_nick);
         nickname = new_nick;
-        std::cout << "Nickname in use. Changed to: " << new_nick << std::endl;
+        ui.print << "Nickname in use. Changed to: " << new_nick << std::endl;
         return true;
     }
 
@@ -214,7 +226,8 @@ bool telnIRC::Parse(const std::string& line) {
     if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* JOIN (#[^\\s]+)"))) {
         if (currentBuffer != match[1]) {
             currentBuffer = match[1];
-            std::cout << YELLOW << "Current buffer updated to channel: " << currentBuffer << RESET << std::endl;
+            ui.print(NC_YELLOW) << "Current buffer updated to channel: " << currentBuffer << std::endl;
+            ui.setHeader("Current buffer: " + currentBuffer);
         }
         return true;
     }
@@ -222,7 +235,7 @@ bool telnIRC::Parse(const std::string& line) {
     // NICK change
     if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* NICK :(.*)$"))) {
         nickname = match[1];
-        std::cout << "Nickname updated to: " << nickname << std::endl;
+        ui.print << "Nickname updated to: " << nickname << std::endl;
         return true;
     }
 
@@ -241,15 +254,14 @@ bool telnIRC::Parse(const std::string& line) {
 }
 
 void telnIRC::show_help() {
-    std::cout << "Available Commands:\n";
-    std::cout << "/j #channel      - Join a channel\n";
-    std::cout << "/p #channel      - Part from a channel\n";
-    std::cout << "/r message       - Send raw message directly to the server\n";
-    std::cout << "/q message       - Quits with the specified message\n";
-    std::cout << "/n newnick       - Change your nickname\n";
-    std::cout << "/w nickname      - Whois a nickname\n";
-    std::cout << "/msg user msg    - Send a private message to a user or channel (updates currentBuffer)\n";
-    std::cout << "/b user/channel  - Set the current buffer to a user or channel\n";
-    std::cout << "/cb              - Show the current buffer\n";
-    std::cout << "/h               - Show this help message\n";
+    ui.print << "Available Commands:" << std::endl;
+    ui.print << "/j #channel      - Join a channel" << std::endl;
+    ui.print << "/p #channel      - Part from a channel" << std::endl;
+    ui.print << "/r message       - Send raw message directly to the server" << std::endl;
+    ui.print << "/q message       - Quits with the specified message" << std::endl;
+    ui.print << "/n newnick       - Change your nickname" << std::endl;
+    ui.print << "/w nickname      - Whois a nickname" << std::endl;
+    ui.print << "/msg user msg    - Send a private message to a user or channel (updates currentBuffer)" << std::endl;
+    ui.print << "/sb user/channel - Set the current buffer to a user or channel" << std::endl;
+    ui.print << "/h               - Show this help message" << std::endl;
 }

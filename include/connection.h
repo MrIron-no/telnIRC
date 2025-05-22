@@ -16,14 +16,23 @@
  * USA.
  */
 
-#ifndef CONNECTION_H
-#define CONNECTION_H
+#pragma once
 
 #include <string>
 #include <thread>
 #include <csignal>
+#include <mutex>
+#include <deque>
 
+#include "logger.h"
 #include "modules.h"
+#include "UIManager.h"
+#include "defs.h"
+
+#ifdef HAVE_OPENSSL
+    #include <openssl/ssl.h>
+    #include <openssl/err.h>
+#endif
 
 class Modules;
 
@@ -32,7 +41,12 @@ extern volatile sig_atomic_t stop_program;
 
 class ConnectionManager {
 public:
-    ConnectionManager(Modules* _mod, const std::string& ip, unsigned int port);
+    ConnectionManager(  Modules* _mod, UIManager& _ui, 
+                        Logger* _logger, std::string& ip, 
+                        unsigned int port, bool useTLS,
+                        std::string _caCertFile, 
+                        std::string _clientCertFile, 
+                        std::string _clientKeyFile);
     ~ConnectionManager();
 
     void Start();
@@ -40,14 +54,32 @@ public:
     void SendData(const std::string& data);
 
 private:
-    void ReadLoop();
+    void MainLoop();
+    void WriteBufferedData();
     std::string receive_message(std::string &buffer);
     void process_received_data(std::string &buffer);
+#ifdef HAVE_OPENSSL
+    bool PerformTLSHandshake();
+    bool LoadCertificates();
+#endif
 
     Modules* mod;
+    UIManager& ui;
+    Logger* logger;
     int sockfd;
     std::string buffer;
+    std::deque<std::string> writeBuffer;
     std::thread receive_thread;
-};
 
-#endif // CONNECTION_MANAGER_H
+    bool tls_enabled = false;
+    bool tls_handshake_done = false;
+    std::string caCertFile;
+    std::string clientCertFile;
+    std::string clientKeyFile;
+
+#ifdef HAVE_OPENSSL
+    unsigned int tls_handshake_retries = 0;
+    SSL_CTX* ssl_ctx;
+    SSL* ssl;
+#endif
+};

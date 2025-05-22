@@ -1,6 +1,6 @@
 A telnet-like IRC client and server.
 
-To compile run 'make'. Copy 'config.cfg.dist' to 'config.cfg' and do your stuff.
+To compile run './configure' followed by 'make'. Copy 'config.cfg.dist' to 'config.cfg' and do your stuff.
 
 Usage:
   ./telnirc [-f configfile] -c | -s

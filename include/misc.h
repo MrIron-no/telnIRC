@@ -16,11 +16,12 @@
  * USA.
  */
 
-#ifndef MISC_H
-#define MISC_H
+#pragma once
 
 #include <string>
 #include <vector>
+
+#define MAX_LOG_LINES 1000
 
 using Params = std::vector<std::string>;
 Params Tokenizer(const std::string&);
@@ -34,5 +35,3 @@ const std::string BLUE = "\033[34m";
 const std::string RED = "\033[31m";
 const std::string YELLOW = "\033[33m";
 const std::string RESET = "\033[0m";
-
-#endif

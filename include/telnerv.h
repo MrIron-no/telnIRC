@@ -16,28 +16,35 @@
  * USA.
  */
 
-#ifndef TELNERV_H
-#define TELNERV_H
+#pragma once
 
 #include "modules.h"
 
 class telnERV : public Modules {
 public:
-    telnERV(const std::string&);
+    telnERV(const std::string&, UIManager&);
     ~telnERV();
 
     void Attach() override;
-    void StartLoop() override;
+    void Detach() override;
+    void OnCommand(std::string) override;
     bool Parse(const std::string&) override;
     void Banner() const override;
 
 private:
+    Logger* logger = nullptr;
+
     /* Config variables. */
     std::string uplink;
     unsigned short port;
     std::string password;
     unsigned short intYY;
     std::string serverName;
+    bool use_tls = false;
+    std::string caCertFile;
+    std::string clientCertFile;
+    std::string clientKeyFile;
+    std::string log_file;
 
     std::string serverYY;
     std::string uplinkYY;
@@ -50,5 +57,3 @@ private:
     void show_help() const;
 
 };
-
-#endif // TELNERV_H

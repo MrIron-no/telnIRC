@@ -16,18 +16,18 @@
  * USA.
  */
 
-#ifndef TELNIRC_H
-#define TELNIRC_H
+#pragma once
 
 #include "modules.h"
 
 class telnIRC : public Modules {
 public:
-    telnIRC(const std::string&);
+    telnIRC(const std::string&, UIManager&);
     ~telnIRC();
 
     void Attach() override;
-    void StartLoop() override;
+    void Detach() override;
+    void OnCommand(std::string) override;
     bool Parse(const std::string&) override;
     void Banner() const override;
 
@@ -38,13 +38,17 @@ private:
     std::string password;
     std::string nickname;
     std::string username;
+    std::string log_file;
     bool use_cap;
+    bool use_tls;
+    std::string caCertFile;
+    std::string clientCertFile;
+    std::string clientKeyFile;
 
     std::string currentBuffer; // Global variable to store the current buffer
+    Logger* logger = nullptr;
 
     void handle_privmsg(const std::string&);
     void show_help();
 
 };
-
-#endif // TELNIRC_H

@@ -5,6 +5,10 @@ nick=telnIRC
 user=telnirc
 cap=yes
 password=
+logfile=buffer.log
+tls=no
+tls_certfile=telnirc.crt
+tls_keyfile=telnirc.key
 
 [telnERV]
 server_ip=127.0.0.1
@@ -12,3 +16,7 @@ numeric=49
 port=4400
 password=passwd
 server_name=telnerv.undernet.org
+logfile=buffer.log
+tls=no
+tls_certfile=telnirc.crt
+tls_keyfile=telnirc.key
