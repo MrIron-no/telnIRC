@@ -13,8 +13,7 @@ telnirc_SOURCES = \
 
 telnirc_CPPFLAGS = -Iinclude
 telnirc_CXXFLAGS = -std=c++20 -Wall -Wextra -pthread -g
-telnirc_LDADD = -lncurses
 
 if HAVE_OPENSSL
-telnirc_LDADD += -lssl -lcrypto
+telnirc_LDADD = -lssl -lcrypto
 endif

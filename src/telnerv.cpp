@@ -52,7 +52,11 @@ void telnERV::Attach() {
     ui.print(NC_YELLOW) << "My YY: " << serverYY << std::endl;
 
     // Initiate connection.
-    conn = new ConnectionManager(this, ui, logger, uplink, port, use_tls, caCertFile, clientCertFile, clientKeyFile);
+    conn = new ConnectionManager(this, ui, logger, uplink, port
+#ifdef HAVE_OPENSSL
+        , use_tls, caCertFile, clientCertFile, clientKeyFile
+#endif
+    );
 
     conn->Start();
 

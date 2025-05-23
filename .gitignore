@@ -18,6 +18,7 @@ config.cfg
 *.so
 *.dylib
 telnirc
+.deps/
 
 # Precompiled Headers
 *.gch
@@ -74,3 +75,4 @@ Thumbs.db
 tags
 stamp-h1
 defs.h
+.dirstamp

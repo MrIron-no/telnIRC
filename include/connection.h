@@ -43,10 +43,14 @@ class ConnectionManager {
 public:
     ConnectionManager(  Modules* _mod, UIManager& _ui, 
                         Logger* _logger, std::string& ip, 
-                        unsigned int port, bool useTLS,
+                        unsigned int port
+#ifdef HAVE_OPENSSL
+                        ,bool useTLS,
                         std::string _caCertFile, 
                         std::string _clientCertFile, 
-                        std::string _clientKeyFile);
+                        std::string _clientKeyFile
+#endif
+                        );
     ~ConnectionManager();
 
     void Start();
@@ -71,13 +75,12 @@ private:
     std::deque<std::string> writeBuffer;
     std::thread receive_thread;
 
+#ifdef HAVE_OPENSSL
     bool tls_enabled = false;
     bool tls_handshake_done = false;
     std::string caCertFile;
     std::string clientCertFile;
     std::string clientKeyFile;
-
-#ifdef HAVE_OPENSSL
     unsigned int tls_handshake_retries = 0;
     SSL_CTX* ssl_ctx;
     SSL* ssl;

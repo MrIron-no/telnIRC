@@ -25,8 +25,15 @@
 #include "connection.h"
 #include "misc.h"
 
-ConnectionManager::ConnectionManager(Modules* _mod, UIManager& _ui, Logger* _logger, std::string& host, unsigned int port, bool useTLS, std::string _caCertFile, std::string _clientCertFile, std::string _clientKeyFile)
-    : mod(_mod), ui(_ui), logger(_logger), tls_enabled(useTLS), caCertFile(_caCertFile), clientCertFile(_clientCertFile), clientKeyFile(_clientKeyFile) {
+ConnectionManager::ConnectionManager(Modules* _mod, UIManager& _ui, Logger* _logger, std::string& host, unsigned int port
+#ifdef HAVE_OPENSSL
+    , bool useTLS, std::string _caCertFile, std::string _clientCertFile, std::string _clientKeyFile
+#endif
+    ) : mod(_mod), ui(_ui), logger(_logger)
+#ifdef HAVE_OPENSSL
+    , tls_enabled(useTLS), caCertFile(_caCertFile), clientCertFile(_clientCertFile), clientKeyFile(_clientKeyFile)
+#endif
+    {
     struct addrinfo hints;
     struct addrinfo *res;
 

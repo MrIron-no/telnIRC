@@ -76,16 +76,15 @@ private:
     static volatile sig_atomic_t resized;
 
     class NcursesStream {
-        WINDOW* win;
         std::ostringstream buffer;
         int activeColor = NC_DEFAULT;
-        UIManager* parent; // Pointer to parent UIManager
+        UIManager* parent;
 
         // Static flag to initialize colors once
         static inline bool colorsInitialized = false;
 
     public:
-        explicit NcursesStream(WINDOW* w, UIManager* p) : win(w), parent(p) { }
+        explicit NcursesStream(UIManager* p) : parent(p) { }
 
         // Allow print(RED) syntax
         NcursesStream& operator()(int color) {

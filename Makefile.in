@@ -89,7 +89,6 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 bin_PROGRAMS = telnirc$(EXEEXT)
-@HAVE_OPENSSL_TRUE@am__append_1 = -lssl -lcrypto
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -112,8 +111,7 @@ am_telnirc_OBJECTS = src/telnirc-main.$(OBJEXT) \
 	src/telnirc-connection.$(OBJEXT) \
 	src/telnirc-UIManager.$(OBJEXT)
 telnirc_OBJECTS = $(am_telnirc_OBJECTS)
-am__DEPENDENCIES_1 =
-telnirc_DEPENDENCIES = $(am__DEPENDENCIES_1)
+telnirc_DEPENDENCIES =
 telnirc_LINK = $(CXXLD) $(telnirc_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
@@ -315,7 +313,7 @@ telnirc_SOURCES = \
 
 telnirc_CPPFLAGS = -Iinclude
 telnirc_CXXFLAGS = -std=c++20 -Wall -Wextra -pthread -g
-telnirc_LDADD = -lncurses $(am__append_1)
+@HAVE_OPENSSL_TRUE@telnirc_LDADD = -lssl -lcrypto
 all: all-am
 
 .SUFFIXES:

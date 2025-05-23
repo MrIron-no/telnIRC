@@ -58,7 +58,11 @@ void telnIRC::Attach() {
     }
 
     // Initiate connection.
-    conn = new ConnectionManager(this, ui, logger, server_name, port, use_tls, caCertFile, clientCertFile, clientKeyFile);
+    conn = new ConnectionManager(this, ui, logger, server_name, port
+#ifdef HAVE_OPENSSL
+        , use_tls, caCertFile, clientCertFile, clientKeyFile
+#endif
+    );
 
     // Start receiving loop in a thread.
     conn->Start();
@@ -212,7 +216,7 @@ bool telnIRC::Parse(const std::string& line) {
         std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
         conn->SendData("NICK " + new_nick);
         nickname = new_nick;
-        ui.print << "Nickname in use. Changed to: " << new_nick << std::endl;
+        ui.print(NC_YELLOW) << "Nickname in use. Changed to: " << new_nick << std::endl;
         return true;
     }
 
@@ -235,7 +239,7 @@ bool telnIRC::Parse(const std::string& line) {
     // NICK change
     if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* NICK :(.*)$"))) {
         nickname = match[1];
-        ui.print << "Nickname updated to: " << nickname << std::endl;
+        ui.print(NC_YELLOW) << "Nickname updated to: " << nickname << std::endl;
         return true;
     }
 
@@ -254,14 +258,14 @@ bool telnIRC::Parse(const std::string& line) {
 }
 
 void telnIRC::show_help() {
-    ui.print << "Available Commands:" << std::endl;
-    ui.print << "/j #channel      - Join a channel" << std::endl;
-    ui.print << "/p #channel      - Part from a channel" << std::endl;
-    ui.print << "/r message       - Send raw message directly to the server" << std::endl;
-    ui.print << "/q message       - Quits with the specified message" << std::endl;
-    ui.print << "/n newnick       - Change your nickname" << std::endl;
-    ui.print << "/w nickname      - Whois a nickname" << std::endl;
-    ui.print << "/msg user msg    - Send a private message to a user or channel (updates currentBuffer)" << std::endl;
-    ui.print << "/sb user/channel - Set the current buffer to a user or channel" << std::endl;
-    ui.print << "/h               - Show this help message" << std::endl;
+    ui.print(NC_YELLOW) << "Available Commands:" << std::endl;
+    ui.print(NC_YELLOW) << "/j #channel      - Join a channel" << std::endl;
+    ui.print(NC_YELLOW) << "/p #channel      - Part from a channel" << std::endl;
+    ui.print(NC_YELLOW) << "/r message       - Send raw message directly to the server" << std::endl;
+    ui.print(NC_YELLOW) << "/q message       - Quits with the specified message" << std::endl;
+    ui.print(NC_YELLOW) << "/n newnick       - Change your nickname" << std::endl;
+    ui.print(NC_YELLOW) << "/w nickname      - Whois a nickname" << std::endl;
+    ui.print(NC_YELLOW) << "/msg user msg    - Send a private message to a user or channel (updates currentBuffer)" << std::endl;
+    ui.print(NC_YELLOW) << "/sb user/channel - Set the current buffer to a user or channel" << std::endl;
+    ui.print(NC_YELLOW) << "/h               - Show this help message" << std::endl;
 }

@@ -27,7 +27,7 @@ volatile sig_atomic_t UIManager::resized = 0;
 
 UIManager::UIManager()
     : output_win(nullptr), header_win(nullptr), input_win(nullptr),
-      term_height(0), term_width(0), scroll_offset(0), print(nullptr, this) {}
+      term_height(0), term_width(0), scroll_offset(0), print(this) {}
 
 UIManager::~UIManager() {
     shutdown();
@@ -53,7 +53,7 @@ void UIManager::init() {
     header_win = newwin(1, term_width, term_height - 4, 0);
     input_win  = newwin(3, term_width, term_height - 3, 0);
 
-    print = NcursesStream(output_win, this);
+    print = NcursesStream(this);
 
     scrollok(output_win, TRUE);
     box(input_win, 0, 0);
