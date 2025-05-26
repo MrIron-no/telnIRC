@@ -28,7 +28,11 @@ telnERV::telnERV(const std::string& configFile, UIManager& ui)
 
     /* Load configuration. */
     ConfigParser config;
-    config.load(configFile, "telnERV");
+    if (!config.load(configFile, "telnERV")) {
+        ui.shutdown();
+        std::cerr << "Error loading configuration file: " << configFile << std::endl;
+        exit(1);
+    }
 
     uplink = config.get<std::string>("server_ip", "127.0.0.1");
     port = config.get<unsigned short>("port", 4400);

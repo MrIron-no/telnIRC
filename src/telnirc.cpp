@@ -30,7 +30,11 @@ telnIRC::telnIRC(const std::string& configFile, UIManager& ui)
 
     /* Load configuration. */
     ConfigParser config;
-    config.load(configFile, "telnIRC");
+    if (!config.load(configFile, "telnIRC")) {
+        ui.shutdown();
+        std::cerr << "Error loading configuration file: " << configFile << std::endl;
+        exit(1);
+    }
 
     server_name = config.get<std::string>("server_ip", "127.0.0.1");
     port = config.get<unsigned int>("port", 4400);

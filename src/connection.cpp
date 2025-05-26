@@ -21,6 +21,7 @@
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include "connection.h"
 #include "misc.h"

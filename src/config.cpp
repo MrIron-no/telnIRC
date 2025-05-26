@@ -26,17 +26,12 @@ bool ConfigParser::isValidFile(const std::string& filename) {
 }
 
 bool ConfigParser::load(const std::string& filename, const std::string& section) {
-    if (!isValidFile(filename)) {
-        std::cerr << "Error: Config file does not exist or cannot be accessed: " << filename << std::endl;
-        ::exit(1);
+    if (!isValidFile(filename))
         return false;
-    }
 
     std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Error: Could not open config file: " << filename << std::endl;
+    if (!file)
         return false;
-    }
 
     std::string line;
     bool in_section = false;
