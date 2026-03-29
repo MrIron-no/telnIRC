@@ -37,6 +37,7 @@ public:
     virtual void Attach() = 0;
     virtual void Detach() = 0;
     virtual void OnCommand(std::string) = 0;
-    virtual bool Parse(const std::string&) = 0;
+    /// display_line is the exact wire text (including IRCv3 @tags) for logs/UI; parsed_line has tags stripped for matching.
+    virtual bool Parse(const std::string& display_line, const std::string& parsed_line) = 0;
     virtual void Banner() const = 0;
 };

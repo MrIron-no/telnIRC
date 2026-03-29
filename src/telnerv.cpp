@@ -108,10 +108,10 @@ void telnERV::burstClient(std::string nick, std::string user, std::string host, 
     ui.print(NC_RED) << "Bursted client " << nick << "!" << user << "@" << host << std::endl;
 }
 
-bool telnERV::Parse(const std::string &line) {
-    ui.print << get_timestamp() << " -> " << line << std::endl;
+bool telnERV::Parse(const std::string& display_line, const std::string& parsed_line) {
+    ui.print << get_timestamp() << " -> " << display_line << std::endl;
 
-    Params params = Tokenizer(line);
+    Params params = Tokenizer(parsed_line);
 
     // msg_SERVER
     if (params.size() > 7 && params[0] == "SERVER") {

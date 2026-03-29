@@ -30,6 +30,9 @@ std::string get_timestamp();
 std::string get_unix_username();
 std::string generate_random_number_string(size_t);
 
+// IRCv3 message-tags: strip "@tag=value;... " prefix so legacy parsers see normal IRC lines.
+void strip_ircv3_message_tags(std::string& line);
+
 // ANSI escape codes for colors
 const std::string BLUE = "\033[34m";
 const std::string RED = "\033[31m";

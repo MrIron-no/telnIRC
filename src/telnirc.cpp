@@ -145,27 +145,27 @@ void telnIRC::Banner() const {
     ui.print << "######################################" << std::endl;
 }
 
-void telnIRC::handle_privmsg(const std::string &line) {
-    // Handle color output first
-    bool contains_nickname = line.find(nickname) != std::string::npos;
+void telnIRC::handle_privmsg(const std::string& display_line, const std::string& parsed_line) {
+    // Handle color output first (show wire line including @tags)
+    bool contains_nickname = parsed_line.find(nickname) != std::string::npos;
     if (contains_nickname) {
         ui.print(NC_RED) << get_timestamp() << " "
-                << "-> " << line << std::endl;
+                << "-> " << display_line << std::endl;
     } else {
         ui.print(NC_BLUE) << get_timestamp() << " "
-                << "-> " << line << std::endl;
+                << "-> " << display_line << std::endl;
     }
 
     // Extract sender nickname
-    size_t start_pos = line.find(":") + 1;
-    size_t end_pos = line.find("!");
-    std::string sender_nick = line.substr(start_pos, end_pos - start_pos);
+    size_t start_pos = parsed_line.find(":") + 1;
+    size_t end_pos = parsed_line.find("!");
+    std::string sender_nick = parsed_line.substr(start_pos, end_pos - start_pos);
 
     // Handle CTCP commands
     std::smatch ctcp_match;
     std::regex ctcp_regex("\\x01([^\\s]+)(.*)\\x01");
 
-    if (std::regex_search(line, ctcp_match, ctcp_regex)) {
+    if (std::regex_search(parsed_line, ctcp_match, ctcp_regex)) {
         std::string ctcpCmd = ctcp_match[1];
         std::string ctcpArgs = ctcp_match[2];
 
@@ -180,7 +180,7 @@ void telnIRC::handle_privmsg(const std::string &line) {
 
     // Check if message is directed to us
     std::regex privmsg_regex("^:[^\\s]+![^\\s]+ PRIVMSG " + nickname + " :.*$");
-    if (!std::regex_search(line, privmsg_regex)) {
+    if (!std::regex_search(parsed_line, privmsg_regex)) {
         return;  // Early return if not directed to us
     }
 
@@ -192,23 +192,23 @@ void telnIRC::handle_privmsg(const std::string &line) {
     }
 }
 
-bool telnIRC::Parse(const std::string& line) {
+bool telnIRC::Parse(const std::string& display_line, const std::string& parsed_line) {
     std::smatch match;
 
     if (logger)
-        logger->log("-> " + line);
+        logger->log("-> " + display_line);
 
     // PRIVMSG handling (including color output)
-    if (std::regex_search(line, std::regex("^:[^\\s]+ PRIVMSG"))) {
-        handle_privmsg(line);
+    if (std::regex_search(parsed_line, std::regex("^:[^\\s]+ PRIVMSG"))) {
+        handle_privmsg(display_line, parsed_line);
         return true;
     }
 
     // Non-PRIVMSG messages are printed in default color
-    ui.print << get_timestamp() << " -> " << line << std::endl;
+    ui.print << get_timestamp() << " -> " << display_line << std::endl;
 
     // Welcome message (001)
-    if (std::regex_search(line, match, std::regex("^:[^\\s]+ 001 ([^\\s]+)")) &&
+    if (std::regex_search(parsed_line, match, std::regex("^:[^\\s]+ 001 ([^\\s]+)")) &&
         match[1] != nickname) {
         nickname = match[1];
         ui.print << "Nickname updated to: " << nickname << std::endl;
@@ -216,7 +216,7 @@ bool telnIRC::Parse(const std::string& line) {
     }
 
     // Nickname in use (433)
-    if (std::regex_search(line, std::regex("^:[^\\s]+ 433"))) {
+    if (std::regex_search(parsed_line, std::regex("^:[^\\s]+ 433"))) {
         std::string new_nick = nickname + generate_random_number_string(12 - nickname.length());
         conn->SendData("NICK " + new_nick);
         nickname = new_nick;
@@ -225,13 +225,13 @@ bool telnIRC::Parse(const std::string& line) {
     }
 
     // PING response
-    if (line.rfind("PING ", 0) == 0) {
-        conn->SendData("PONG " + line.substr(5));
+    if (parsed_line.rfind("PING ", 0) == 0) {
+        conn->SendData("PONG " + parsed_line.substr(5));
         return true;
     }
 
     // JOIN message
-    if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* JOIN (#[^\\s]+)"))) {
+    if (std::regex_search(parsed_line, match, std::regex("^:" + nickname + "!.* JOIN (#[^\\s]+)"))) {
         if (currentBuffer != match[1]) {
             currentBuffer = match[1];
             ui.print(NC_YELLOW) << "Current buffer updated to channel: " << currentBuffer << std::endl;
@@ -241,19 +241,19 @@ bool telnIRC::Parse(const std::string& line) {
     }
 
     // NICK change
-    if (std::regex_search(line, match, std::regex("^:" + nickname + "!.* NICK :(.*)$"))) {
+    if (std::regex_search(parsed_line, match, std::regex("^:" + nickname + "!.* NICK :(.*)$"))) {
         nickname = match[1];
         ui.print(NC_YELLOW) << "Nickname updated to: " << nickname << std::endl;
         return true;
     }
 
     // CAP messages
-    if (std::regex_search(line, match, std::regex("^:[^\\s]+ CAP [^\\s]+ LS :(.*)$")) && use_cap) {
+    if (std::regex_search(parsed_line, match, std::regex("^:[^\\s]+ CAP [^\\s]+ LS :(.*)$")) && use_cap) {
         conn->SendData("CAP REQ :" + std::string(match[1]));
         return true;
     }
 
-    if (std::regex_search(line, std::regex("^:[^\\s]+ CAP [^\\s]+ ACK .*$"))) {
+    if (std::regex_search(parsed_line, std::regex("^:[^\\s]+ CAP [^\\s]+ ACK .*$"))) {
         conn->SendData("CAP END");
         return true;
     }

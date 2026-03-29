@@ -18,6 +18,7 @@
 
 #include <string>
 #include <ctime>
+#include <cctype>
 #include <sstream>
 #include <iomanip>
 #include <random>
@@ -26,6 +27,21 @@
 #include <unistd.h>    // For getuid()
 
 #include "misc.h"
+
+void strip_ircv3_message_tags(std::string& line) {
+    if (line.empty() || line[0] != '@')
+        return;
+    // Tag keys/values cannot contain raw spaces (they use \s); first ASCII space ends the tag block.
+    size_t sp = line.find(' ');
+    if (sp == std::string::npos)
+        return;
+    line.erase(0, sp + 1);
+    size_t i = 0;
+    while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])))
+        ++i;
+    if (i > 0)
+        line.erase(0, i);
+}
 
 std::string get_timestamp() {
     auto now = std::time(nullptr);

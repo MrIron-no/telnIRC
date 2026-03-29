@@ -23,6 +23,7 @@
 #include <vector>
 #include <sstream>
 #include <csignal>
+#include <mutex>
 
 struct ColoredLine {
     std::string text;
@@ -37,6 +38,18 @@ enum NcColor {
     NC_YELLOW  = 3
 };
 
+namespace detail {
+// Per-thread buffers so ui.print from the receive thread cannot interleave with the main thread.
+inline std::ostringstream& ncurses_tls_buf() {
+    thread_local std::ostringstream buf;
+    return buf;
+}
+inline int& ncurses_tls_color() {
+    thread_local int c = NC_DEFAULT;
+    return c;
+}
+}  // namespace detail
+
 class UIManager {
 private:
     WINDOW* output_win;
@@ -46,6 +59,10 @@ private:
     std::vector<ColoredLine> log_lines;
     int scroll_offset;
     std::string currentHeader;
+    mutable std::recursive_mutex display_mutex;
+    bool output_dirty = false;
+
+    void pushLogLineUnlocked(const std::string& line, int color);
     std::vector<std::string> wrap_text(const std::string& text, int max_width);
 
     public:
@@ -58,7 +75,7 @@ private:
     void resize();
     void redrawAll();
     void redrawInput(const std::string& input_line, int cursor_x = 3);
-    void redrawOutput();
+    void redrawOutput(bool force = false);
     void setHeader(const std::string& header);
 
     void scrollUp(int lines = 1);
@@ -69,45 +86,44 @@ private:
 
     int getInput(std::string& input_line, int& cursor_x, bool& resized);
 
-    void addLogLine(const std::string& line, int color);
     void clampScroll();
 
     // Expose for signal handler
     static volatile sig_atomic_t resized;
 
     class NcursesStream {
-        std::ostringstream buffer;
-        int activeColor = NC_DEFAULT;
         UIManager* parent;
-
-        // Static flag to initialize colors once
-        static inline bool colorsInitialized = false;
 
     public:
         explicit NcursesStream(UIManager* p) : parent(p) { }
 
         // Allow print(RED) syntax
         NcursesStream& operator()(int color) {
-            activeColor = color;
+            std::lock_guard<std::recursive_mutex> lock(parent->display_mutex);
+            detail::ncurses_tls_color() = color;
             return *this;
         }
 
         // Handle any streamed type
         template <typename T>
         NcursesStream& operator<<(const T& val) {
-            buffer << val;
+            std::lock_guard<std::recursive_mutex> lock(parent->display_mutex);
+            detail::ncurses_tls_buf() << val;
             return *this;
         }
 
         // Handle std::endl
         NcursesStream& operator<<(std::ostream& (*manip)(std::ostream&)) {
             if (manip == static_cast<std::ostream& (*)(std::ostream&)>(std::endl)) {
-                parent->addLogLine(buffer.str(), activeColor);
-                parent->scroll_offset = 0; // reset scroll to bottom
-                buffer.str("");
-                buffer.clear();
-                activeColor = NC_DEFAULT;
-                parent->redrawOutput();
+                std::lock_guard<std::recursive_mutex> lock(parent->display_mutex);
+                std::string line = detail::ncurses_tls_buf().str();
+                detail::ncurses_tls_buf().str("");
+                detail::ncurses_tls_buf().clear();
+                int col = detail::ncurses_tls_color();
+                detail::ncurses_tls_color() = NC_DEFAULT;
+                parent->pushLogLineUnlocked(line, col);
+                parent->scroll_offset = 0;
+                parent->output_dirty = true;
             }
             return *this;
         }

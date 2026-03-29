@@ -65,13 +65,16 @@ void UIManager::init() {
 }
 
 void UIManager::shutdown() {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     if (output_win) delwin(output_win);
     if (header_win) delwin(header_win);
     if (input_win) delwin(input_win);
+    output_win = header_win = input_win = nullptr;
     endwin();
 }
 
 void UIManager::resize() {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     endwin();
     refresh();
     clear();
@@ -93,21 +96,24 @@ void UIManager::resize() {
 
     wrefresh(output_win);
     wrefresh(input_win);
-    setHeader(currentHeader);
+    werase(header_win);
+    mvwprintw(header_win, 0, 1, "%s", currentHeader.c_str());
+    wrefresh(header_win);
     UIManager::resized = 0;
 }
 
 void UIManager::redrawAll() {
-    redrawOutput();
+    redrawOutput(true);
     redrawInput("", 3);
     setHeader(currentHeader);
 }
 
 void UIManager::redrawInput(const std::string& input_line, int cursor_x) {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     werase(input_win);
     box(input_win, 0, 0);
     mvwprintw(input_win, 1, 1, "> %s", input_line.c_str());
-    wmove(input_win, 1, cursor_x + input_line.length());
+    wmove(input_win, 1, cursor_x + static_cast<int>(input_line.length()));
     wrefresh(input_win);
 }
 
@@ -122,7 +128,12 @@ std::vector<std::string> UIManager::wrap_text(const std::string& text, int max_w
     return lines;
 }
 
-void UIManager::redrawOutput() {
+void UIManager::redrawOutput(bool force) {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
+    if (!force && !output_dirty)
+        return;
+    output_dirty = false;
+
     werase(output_win);
     int win_height, win_width;
     getmaxyx(output_win, win_height, win_width);
@@ -153,13 +164,14 @@ void UIManager::redrawOutput() {
 }
 
 void UIManager::setHeader(const std::string& header) {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     werase(header_win);
     mvwprintw(header_win, 0, 1, "%s", header.c_str());
     wrefresh(header_win);
     currentHeader = header;
 }
 
-void UIManager::addLogLine(const std::string& line, int color) {
+void UIManager::pushLogLineUnlocked(const std::string& line, int color) {
     size_t start = 0, end;
     while ((end = line.find('\n', start)) != std::string::npos) {
         std::string clean = line.substr(start, end - start);
@@ -176,13 +188,14 @@ void UIManager::addLogLine(const std::string& line, int color) {
 }
 
 void UIManager::clampScroll() {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     int win_height, win_width;
     getmaxyx(output_win, win_height, win_width);
 
     int wrapped_count = 0;
     for (const auto& line : log_lines) {
         auto parts = wrap_text(line.text, win_width);
-        wrapped_count += parts.size();
+        wrapped_count += static_cast<int>(parts.size());
     }
 
     int max_scroll = std::max(0, wrapped_count - win_height);
@@ -193,8 +206,10 @@ void UIManager::clampScroll() {
 // Returns key pressed, updates input_line, cursor_x, scroll_offset, and handles resize
 int UIManager::getInput(std::string& input_line, int& cursor_x, bool& resized_flag) {
     if (resized) {
+        // Must not hold display_mutex across wgetch: the receive thread needs the mutex to log lines.
+        std::lock_guard<std::recursive_mutex> lock(display_mutex);
         resize();
-        redrawOutput();
+        redrawOutput(true);
         redrawInput(input_line, cursor_x);
         resized_flag = true;
         return -1;
@@ -205,10 +220,12 @@ int UIManager::getInput(std::string& input_line, int& cursor_x, bool& resized_fl
 }
 
 void UIManager::scrollUp(int lines) {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     scroll_offset += lines;
     clampScroll();
 }
 void UIManager::scrollDown(int lines) {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     scroll_offset -= lines;
     if (scroll_offset < 0) scroll_offset = 0;
 }
@@ -223,5 +240,6 @@ void UIManager::scrollPageDown() {
     scrollDown(win_height / 2);
 }
 void UIManager::scrollToBottom() {
+    std::lock_guard<std::recursive_mutex> lock(display_mutex);
     scroll_offset = 0;
 }

@@ -11,9 +11,9 @@ telnirc_SOURCES = \
     src/connection.cpp \
     src/UIManager.cpp
 
-telnirc_CPPFLAGS = -Iinclude
+telnirc_CPPFLAGS = -Iinclude $(OPENSSL_CFLAGS)
 telnirc_CXXFLAGS = -std=c++20 -Wall -Wextra -pthread -g
 
 if HAVE_OPENSSL
-telnirc_LDADD = -lssl -lcrypto
+telnirc_LDADD = $(OPENSSL_LIBS)
 endif

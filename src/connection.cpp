@@ -241,8 +241,10 @@ std::string ConnectionManager::receive_message(std::string &buffer) {
 void ConnectionManager::process_received_data(std::string &buffer) {
     std::string::size_type end;
     while ((end = buffer.find("\r\n")) != std::string::npos) {
-        std::string line = buffer.substr(0, end);
-        mod->Parse(line);
+        std::string display_line = buffer.substr(0, end);
+        std::string parsed_line = display_line;
+        strip_ircv3_message_tags(parsed_line);
+        mod->Parse(display_line, parsed_line);
         buffer.erase(0, end + 2);
     }
 }

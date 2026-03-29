@@ -28,7 +28,7 @@ public:
     void Attach() override;
     void Detach() override;
     void OnCommand(std::string) override;
-    bool Parse(const std::string&) override;
+    bool Parse(const std::string& display_line, const std::string& parsed_line) override;
     void Banner() const override;
 
 private:
@@ -48,7 +48,7 @@ private:
     std::string currentBuffer; // Global variable to store the current buffer
     Logger* logger = nullptr;
 
-    void handle_privmsg(const std::string&);
+    void handle_privmsg(const std::string& display_line, const std::string& parsed_line);
     void show_help();
 
 };

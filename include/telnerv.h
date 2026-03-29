@@ -28,7 +28,7 @@ public:
     void Attach() override;
     void Detach() override;
     void OnCommand(std::string) override;
-    bool Parse(const std::string&) override;
+    bool Parse(const std::string& display_line, const std::string& parsed_line) override;
     void Banner() const override;
 
 private:

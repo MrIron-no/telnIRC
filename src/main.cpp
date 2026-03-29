@@ -150,10 +150,8 @@ int main(int argc, char *argv[]) {
         }
 
         ui.clampScroll();
-        if (need_redraw_output) {
-            ui.redrawOutput();
-            need_redraw_output = false;
-        }
+        ui.redrawOutput(need_redraw_output);
+        need_redraw_output = false;
         ui.redrawInput(input_line, cursor_x);
     }
 
