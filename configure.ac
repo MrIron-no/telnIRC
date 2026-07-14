@@ -1,5 +1,6 @@
 AC_INIT([telnIRC], [0.2], [mriron@undernet.org])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
+AM_MAINTAINER_MODE([disable])
 AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_INSTALL
