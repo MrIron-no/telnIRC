@@ -13,4 +13,4 @@ telnirc_SOURCES = \
 
 telnirc_CPPFLAGS = -Iinclude @OPENSSL_CFLAGS@ @NCURSES_CFLAGS@
 telnirc_CXXFLAGS = -std=c++20 -Wall -Wextra -pthread -g
-telnirc_LDADD = @OPENSSL_LIBS@ @NCURSES_LIBS@ -lpthread
+telnirc_LDADD = @OPENSSL_LIBS@ @NCURSES_LIBS@
