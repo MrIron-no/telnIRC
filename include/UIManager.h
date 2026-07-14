@@ -18,6 +18,9 @@
 
 #pragma once
 
+#ifndef NCURSES_WIDECHAR
+#define NCURSES_WIDECHAR 1
+#endif
 #include <ncurses.h>
 #include <string>
 #include <vector>
