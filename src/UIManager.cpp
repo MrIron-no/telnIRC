@@ -19,7 +19,12 @@
 #include <algorithm>
 #include <csignal>
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
+#include <clocale>
+#include <climits>
+#include <cwchar>
 #include "UIManager.h"
 #include "misc.h"
 
@@ -34,6 +39,7 @@ UIManager::~UIManager() {
 }
 
 void UIManager::init() {
+    setlocale(LC_ALL, "");
     initscr();
     if (has_colors()) {
         start_color();
@@ -69,8 +75,30 @@ void UIManager::shutdown() {
     if (output_win) delwin(output_win);
     if (header_win) delwin(header_win);
     if (input_win) delwin(input_win);
-    output_win = header_win = input_win = nullptr;
+    output_win = nullptr;
+    header_win = nullptr;
+    input_win = nullptr;
     endwin();
+}
+
+void UIManager::fatal(const std::string& msg) {
+    print(NC_RED) << msg << std::endl;
+    waitForExit();
+    shutdown();
+    std::cerr << msg << std::endl;
+    exit(1);
+}
+
+void UIManager::waitForExit() {
+    scrollToBottom();
+    print(NC_YELLOW) << "Press any key to exit..." << std::endl;
+    redrawOutput();
+    redrawInput("", 3);
+    wrefresh(output_win);
+    wrefresh(input_win);
+    wtimeout(input_win, -1);
+    wint_t wc;
+    wget_wch(input_win, &wc);
 }
 
 void UIManager::resize() {
@@ -112,8 +140,10 @@ void UIManager::redrawInput(const std::string& input_line, int cursor_x) {
     std::lock_guard<std::recursive_mutex> lock(display_mutex);
     werase(input_win);
     box(input_win, 0, 0);
-    mvwprintw(input_win, 1, 1, "> %s", input_line.c_str());
-    wmove(input_win, 1, cursor_x + static_cast<int>(input_line.length()));
+    mvwaddstr(input_win, 1, 1, "> ");
+    wmove(input_win, 1, 3);
+    waddstr(input_win, input_line.c_str());
+    wmove(input_win, 1, cursor_x + utf8_display_width(input_line));
     wrefresh(input_win);
 }
 
@@ -166,7 +196,15 @@ void UIManager::redrawOutput(bool force) {
 void UIManager::setHeader(const std::string& header) {
     std::lock_guard<std::recursive_mutex> lock(display_mutex);
     werase(header_win);
-    mvwprintw(header_win, 0, 1, "%s", header.c_str());
+    const std::string prefix = "Current buffer: ";
+    if (header.rfind(prefix, 0) == 0) {
+        wattron(header_win, COLOR_PAIR(NC_BLUE));
+        mvwaddstr(header_win, 0, 1, prefix.c_str());
+        wattroff(header_win, COLOR_PAIR(NC_BLUE));
+        waddstr(header_win, header.substr(prefix.size()).c_str());
+    } else {
+        mvwaddstr(header_win, 0, 1, header.c_str());
+    }
     wrefresh(header_win);
     currentHeader = header;
 }
@@ -214,9 +252,27 @@ int UIManager::getInput(std::string& input_line, int& cursor_x, bool& resized_fl
         resized_flag = true;
         return -1;
     }
-    int ch = wgetch(input_win);
+
+    wint_t wc;
+    int ret = wget_wch(input_win, &wc);
     resized_flag = false;
-    return ch;
+
+    if (ret == ERR)
+        return ERR;
+
+    if (ret == KEY_CODE_YES)
+        return static_cast<int>(wc);
+
+    if (wc == L'\n' || wc == L'\r')
+        return '\n';
+
+    char mb[MB_LEN_MAX];
+    mbstate_t ps{};
+    size_t n = wcrtomb(mb, static_cast<wchar_t>(wc), &ps);
+    if (n != static_cast<size_t>(-1) && n > 0)
+        input_line.append(mb, n);
+
+    return 0;
 }
 
 void UIManager::scrollUp(int lines) {

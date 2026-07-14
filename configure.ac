@@ -5,7 +5,7 @@ AC_PROG_CC
 AC_PROG_INSTALL
 
 # Checks for libraries
-AC_CHECK_LIB([ncurses], [initscr], [], [AC_MSG_ERROR([ncurses library not found])])
+PKG_CHECK_MODULES([NCURSES], [ncursesw], [], [AC_MSG_ERROR([ncursesw is required])])
 AC_CHECK_LIB([pthread], [pthread_create], [], [AC_MSG_ERROR([pthread library not found])])
 
 dnl Homebrew kegs are not on the default pkg-config search path. If `brew` is available,
@@ -30,13 +30,7 @@ else
   AC_MSG_RESULT([no])
 fi
 
-# Optionally check for OpenSSL if you use TLS
-PKG_CHECK_MODULES([OPENSSL], [openssl], [have_openssl=yes], [have_openssl=no])
-
-AM_CONDITIONAL([HAVE_OPENSSL], [test "x$have_openssl" = "xyes"])
-if test "x$have_openssl" = "xyes"; then
-  AC_DEFINE([HAVE_OPENSSL], [1], [Define if OpenSSL is available])
-fi
+PKG_CHECK_MODULES([OPENSSL], [openssl], [], [AC_MSG_ERROR([OpenSSL is required])])
 
 # Checks for header files
 AC_CHECK_HEADERS([ncurses.h])

@@ -26,9 +26,26 @@
 using Params = std::vector<std::string>;
 Params Tokenizer(const std::string&);
 
+struct HostConfig {
+    enum class Transport { TCP, WebSocket };
+
+    Transport transport = Transport::TCP;
+    std::string hostname;
+    unsigned int port = 0;
+    std::string path = "/";
+    bool implicit_tls = false;
+    std::string original;
+};
+
+bool parse_host(const std::string& host, unsigned int default_port, HostConfig& out);
+
 std::string get_timestamp();
 std::string get_unix_username();
 std::string generate_random_number_string(size_t);
+std::string sha1_base64(const std::string& input);
+std::string generate_websocket_key();
+void utf8_pop_back(std::string& out);
+int utf8_display_width(const std::string& text);
 
 // IRCv3 message-tags: strip "@tag=value;... " prefix so legacy parsers see normal IRC lines.
 void strip_ircv3_message_tags(std::string& line);

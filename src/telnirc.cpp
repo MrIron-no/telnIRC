@@ -31,13 +31,13 @@ telnIRC::telnIRC(const std::string& configFile, UIManager& ui)
     /* Load configuration. */
     ConfigParser config;
     if (!config.load(configFile, "telnIRC")) {
-        ui.shutdown();
-        std::cerr << "Error loading configuration file: " << configFile << std::endl;
-        exit(1);
+        ui.fatal("Error loading configuration file: " + configFile);
     }
 
-    server_name = config.get<std::string>("server_ip", "127.0.0.1");
-    port = config.get<unsigned int>("port", 4400);
+    std::string host_value = config.get<std::string>("host", "127.0.0.1:6667");
+    if (!parse_host(host_value, 6667, host)) {
+        ui.fatal("Error parsing host: " + host_value);
+    }
     password = config.get<std::string>("password", "");
     nickname = config.get<std::string>("nick", get_unix_username());
     username = config.get<std::string>("user", nickname);
@@ -45,8 +45,12 @@ telnIRC::telnIRC(const std::string& configFile, UIManager& ui)
     use_cap = config.get<bool>("cap", true);
     use_tls = config.get<bool>("tls", false);
     caCertFile = config.get<std::string>("tls_cacert", "");
-    clientCertFile = config.get<std::string>("tls_cert", "");
-    clientKeyFile = config.get<std::string>("tls_key", "");
+    clientCertFile = config.get<std::string>("tls_certfile", "");
+    if (clientCertFile.empty())
+        clientCertFile = config.get<std::string>("tls_cert", "");
+    clientKeyFile = config.get<std::string>("tls_keyfile", "");
+    if (clientKeyFile.empty())
+        clientKeyFile = config.get<std::string>("tls_key", "");
 }
 
 telnIRC::~telnIRC() {
@@ -62,11 +66,8 @@ void telnIRC::Attach() {
     }
 
     // Initiate connection.
-    conn = new ConnectionManager(this, ui, logger, server_name, port
-#ifdef HAVE_OPENSSL
-        , use_tls, caCertFile, clientCertFile, clientKeyFile
-#endif
-    );
+    conn = new ConnectionManager(this, ui, logger, host,
+        use_tls, caCertFile, clientCertFile, clientKeyFile);
 
     // Start receiving loop in a thread.
     conn->Start();

@@ -19,6 +19,7 @@
 #pragma once
 
 #include "modules.h"
+#include "misc.h"
 
 class telnIRC : public Modules {
 public:
@@ -33,8 +34,7 @@ public:
 
 private:
     /* Configuration variables. */
-    std::string server_name;
-    unsigned short port;
+    HostConfig host;
     std::string password;
     std::string nickname;
     std::string username;

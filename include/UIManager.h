@@ -71,6 +71,8 @@ private:
 
     void init();
     void shutdown();
+    [[noreturn]] void fatal(const std::string& msg);
+    void waitForExit();
 
     void resize();
     void redrawAll();

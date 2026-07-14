@@ -26,6 +26,7 @@
 
 #include "telnirc.h"
 #include "telnerv.h"
+#include "misc.h"
 #include "UIManager.h"
 
 volatile sig_atomic_t stop_program = 0;
@@ -129,6 +130,7 @@ int main(int argc, char *argv[]) {
 
         switch (ch) {
             case '\n':
+            case KEY_ENTER:
                 module->OnCommand(input_line);
                 input_line.clear();
                 cursor_x = 3;
@@ -138,14 +140,13 @@ int main(int argc, char *argv[]) {
             case KEY_BACKSPACE:
             case 127:
             case 8:
-                if (!input_line.empty()) input_line.pop_back();
+                utf8_pop_back(input_line);
                 break;
             case KEY_PPAGE: ui.scrollPageUp(); need_redraw_output = true; break;
             case KEY_NPAGE: ui.scrollPageDown(); need_redraw_output = true; break;
             case KEY_UP:    ui.scrollUp(); need_redraw_output = true; break;
             case KEY_DOWN:  ui.scrollDown(); need_redraw_output = true; break;
             default:
-                if (isprint(ch)) input_line += static_cast<char>(ch);
                 break;
         }
 
@@ -157,6 +158,9 @@ int main(int argc, char *argv[]) {
 
     // After stop_program is set, join the thread
     module->Detach();
+
+    if (stop_program)
+        ui.waitForExit();
 
     ui.shutdown();
 

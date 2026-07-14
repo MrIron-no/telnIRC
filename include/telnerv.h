@@ -19,6 +19,7 @@
 #pragma once
 
 #include "modules.h"
+#include "misc.h"
 
 class telnERV : public Modules {
 public:
@@ -35,8 +36,7 @@ private:
     Logger* logger = nullptr;
 
     /* Config variables. */
-    std::string uplink;
-    unsigned short port;
+    HostConfig host;
     std::string password;
     unsigned short intYY;
     std::string serverName;

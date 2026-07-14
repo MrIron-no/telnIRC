@@ -1,6 +1,5 @@
 [telnIRC]
-server_ip=127.0.0.1
-port=6667
+host=127.0.0.1:6667
 nick=telnIRC
 user=telnirc
 cap=yes
@@ -11,9 +10,8 @@ tls_certfile=telnirc.crt
 tls_keyfile=telnirc.key
 
 [telnERV]
-server_ip=127.0.0.1
+host=127.0.0.1:4400
 numeric=49
-port=4400
 password=passwd
 server_name=telnerv.undernet.org
 logfile=buffer.log
